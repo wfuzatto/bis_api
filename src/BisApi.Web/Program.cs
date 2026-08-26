@@ -1,9 +1,12 @@
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
 using BisApi.Hardware;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls(builder.Configuration["BisApi:Url"] ?? "http://127.0.0.1:8765");
 builder.Services.AddSingleton<Acr120Service>();
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 var app = builder.Build();
 app.UseDefaultFiles();
@@ -50,28 +53,36 @@ app.MapPost("/api/card/login", Execute((Acr120Service reader, LoginRequest reque
     return Results.Ok(new { authenticated = true, request.Sector, keyType = request.KeyType.ToString() });
 }));
 
-app.MapGet("/api/card/block/{block:byte}", Execute((Acr120Service reader, byte block) =>
-    Results.Ok(reader.ReadBlock(block))));
+app.MapGet("/api/card/block/{block:int}", Execute((Acr120Service reader, int block) =>
+{
+    if (block is < 0 or > 255)
+        return Results.BadRequest(new { error = "Bloco deve estar entre 0 e 255." });
+    return Results.Ok(reader.ReadBlock((byte)block));
+}));
 
 app.MapPost("/api/card/dump-sector", Execute((Acr120Service reader, DumpSectorRequest request) =>
     Results.Ok(reader.DumpSector(request.Sector, request.KeyType, request.KeyHex))));
 
-app.MapPost("/api/card/block/{block:byte}", Execute((Acr120Service reader, byte block, WriteBlockRequest request) =>
+app.MapPost("/api/card/block/{block:int}", Execute((Acr120Service reader, int block, WriteBlockRequest request) =>
 {
+    if (block is < 0 or > 255)
+        return Results.BadRequest(new { error = "Bloco deve estar entre 0 e 255." });
+
+    var blockByte = (byte)block;
     var writesEnabled = app.Configuration.GetValue("BisApi:EnableRawWrites", false);
     if (!writesEnabled)
-        return Results.StatusCode(StatusCodes.Status403Forbidden);
+        return Results.Json(new { error = "Escrita crua está desabilitada em appsettings.json." }, statusCode: StatusCodes.Status403Forbidden);
 
     var requiredChallenge = app.Configuration["BisApi:RequireWriteChallenge"] ?? "GRAVAR";
     if (!string.Equals(request.Confirmation, requiredChallenge, StringComparison.Ordinal))
         return Results.BadRequest(new { error = "Confirmação de escrita inválida." });
 
-    var trailerWrite = Acr120Service.IsTrailerBlock(block);
+    var trailerWrite = Acr120Service.IsTrailerBlock(blockByte);
     var trailerWritesEnabled = app.Configuration.GetValue("BisApi:AllowTrailerWrites", false);
     if (trailerWrite && !trailerWritesEnabled)
         return Results.BadRequest(new { error = "Escrita em sector trailer está bloqueada por segurança." });
 
-    reader.WriteBlock(block, request.DataHex);
+    reader.WriteBlock(blockByte, request.DataHex);
     return Results.Ok(new { written = true, block, trailer = trailerWrite });
 }));
 
