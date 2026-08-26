@@ -27,10 +27,10 @@ app.MapGet("/api/health", (Acr120Service reader) => Results.Ok(new
     trailerWritesEnabled = app.Configuration.GetValue("BisApi:AllowTrailerWrites", false)
 }));
 
-app.MapGet("/api/reader/dll-version", Execute((Acr120Service reader) =>
+app.MapGet("/api/reader/dll-version", Execute0((Acr120Service reader) =>
     Results.Ok(new { version = reader.GetDllVersion() })));
 
-app.MapPost("/api/reader/open", Execute((Acr120Service reader, OpenReaderRequest request) =>
+app.MapPost("/api/reader/open", Execute1((Acr120Service reader, OpenReaderRequest request) =>
 {
     if (request.Port is < 0 or > 7)
         return Results.BadRequest(new { error = "Port deve ser 0-7 (USB1-USB8)." });
@@ -38,32 +38,32 @@ app.MapPost("/api/reader/open", Execute((Acr120Service reader, OpenReaderRequest
     return Results.Ok(reader.Open(request.Port));
 }));
 
-app.MapPost("/api/reader/close", Execute((Acr120Service reader) =>
+app.MapPost("/api/reader/close", Execute0((Acr120Service reader) =>
 {
     reader.Close();
     return Results.Ok(new { open = false });
 }));
 
-app.MapGet("/api/card/select", Execute((Acr120Service reader) =>
+app.MapGet("/api/card/select", Execute0((Acr120Service reader) =>
     Results.Ok(reader.SelectCard())));
 
-app.MapPost("/api/card/login", Execute((Acr120Service reader, LoginRequest request) =>
+app.MapPost("/api/card/login", Execute1((Acr120Service reader, LoginRequest request) =>
 {
     reader.Login(request.Sector, request.KeyType, request.KeyHex);
     return Results.Ok(new { authenticated = true, request.Sector, keyType = request.KeyType.ToString() });
 }));
 
-app.MapGet("/api/card/block/{block:int}", Execute((Acr120Service reader, int block) =>
+app.MapGet("/api/card/block/{block:int}", Execute1((Acr120Service reader, int block) =>
 {
     if (block is < 0 or > 255)
         return Results.BadRequest(new { error = "Bloco deve estar entre 0 e 255." });
     return Results.Ok(reader.ReadBlock((byte)block));
 }));
 
-app.MapPost("/api/card/dump-sector", Execute((Acr120Service reader, DumpSectorRequest request) =>
+app.MapPost("/api/card/dump-sector", Execute1((Acr120Service reader, DumpSectorRequest request) =>
     Results.Ok(reader.DumpSector(request.Sector, request.KeyType, request.KeyHex))));
 
-app.MapPost("/api/card/block/{block:int}", Execute((Acr120Service reader, int block, WriteBlockRequest request) =>
+app.MapPost("/api/card/block/{block:int}", Execute2((Acr120Service reader, int block, WriteBlockRequest request) =>
 {
     if (block is < 0 or > 255)
         return Results.BadRequest(new { error = "Bloco deve estar entre 0 e 255." });
@@ -97,13 +97,13 @@ app.MapPost("/api/hotel-card/encode", (HotelCardRequest request) =>
 app.MapFallbackToFile("index.html");
 app.Run();
 
-static Delegate Execute(Func<Acr120Service, IResult> action) =>
+static Delegate Execute0(Func<Acr120Service, IResult> action) =>
     (Acr120Service reader) => Safe(() => action(reader));
 
-static Delegate Execute<T1>(Func<Acr120Service, T1, IResult> action) =>
+static Delegate Execute1<T1>(Func<Acr120Service, T1, IResult> action) =>
     (Acr120Service reader, T1 arg1) => Safe(() => action(reader, arg1));
 
-static Delegate Execute<T1, T2>(Func<Acr120Service, T1, T2, IResult> action) =>
+static Delegate Execute2<T1, T2>(Func<Acr120Service, T1, T2, IResult> action) =>
     (Acr120Service reader, T1 arg1, T2 arg2) => Safe(() => action(reader, arg1, arg2));
 
 static IResult Safe(Func<IResult> action)
