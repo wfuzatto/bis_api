@@ -1,0 +1,8 @@
+LIBRARY AcsReader
+EXPORTS
+    acr_120Open
+    acr_120Select
+    acr_120Read
+    acr_120Write
+    acr_120Close
+    acr_120Beep

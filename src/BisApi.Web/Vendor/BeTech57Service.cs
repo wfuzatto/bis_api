@@ -42,6 +42,31 @@ public sealed class BeTech57Service
         return BeTech57Native.SerialNoFromNow();
     }
 
+    public ReadSnrResult ReadSnr()
+    {
+        lock (_sync)
+        {
+            EnsureRuntime();
+            var section = _configuration.GetSection("BeTech57");
+            var card = _pcsc.Probe(section["PcscReader"]);
+            ConfigureShim(card.Reader);
+            var port = checked((byte)section.GetValue("Port", 1));
+            var readerModel = checked((byte)section.GetValue("ReaderModel", 4));
+            var serial = new byte[8];
+            var result = BeTech57Native.ReadSnr(port, readerModel, serial);
+            return new ReadSnrResult(result == 0, result, card.Reader,
+                result == 0 ? System.Text.Encoding.ASCII.GetString(serial).TrimEnd('\0') : null, card.UidHex);
+        }
+    }
+
+    private void ConfigureShim(string reader)
+    {
+        Environment.SetEnvironmentVariable("BIS_API_PCSC_READER", reader, EnvironmentVariableTarget.Process);
+        Environment.SetEnvironmentVariable("BIS_API_SHIM_TRACE",
+            _configuration.GetValue("BeTech57:ShimTrace", false) ? "1" : null,
+            EnvironmentVariableTarget.Process);
+    }
+
     public HotelCardWriteResult WriteGuestCard(HotelCardWriteRequest request)
     {
         lock (_sync)
@@ -68,10 +93,10 @@ public sealed class BeTech57Service
 
             // Fail-fast: confirma que há um ACR122/cartão presente antes de entrar no codec legado.
             var card = _pcsc.Probe(readerName);
-            Environment.SetEnvironmentVariable("BIS_API_PCSC_READER", card.Reader, EnvironmentVariableTarget.Process);
+            ConfigureShim(card.Reader);
             ApplyOptionalKeyEnvironment(section);
 
-            var readerModel = checked((byte)section.GetValue("ReaderModel", 4)); // RW-41 = 4 no PMSSaga
+            var readerModel = checked((byte)section.GetValue("ReaderModel", 4)); // Codec selector 4 = ACSMF1USB / AcsReader.dll.
             var port = checked((byte)section.GetValue("Port", 1));
             var sector = checked((byte)section.GetValue("SectorNo", 0));
 
@@ -88,8 +113,8 @@ public sealed class BeTech57Service
             var end = request.ValidUntil.ToLocalTime().ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
 
             var result = BeTech57Native.WriteGuestCard(
-                readerModel,
                 port,
+                readerModel,
                 sector,
                 password,
                 guestSerial,
@@ -181,6 +206,8 @@ public sealed class BeTech57Service
         _ => $"Código retornado pelo codec: {result}"
     };
 }
+
+public sealed record ReadSnrResult(bool Success, int VendorResult, string Reader, string? Serial, string UidHex);
 
 public sealed record BeTech57Status(
     bool CodecPresent,

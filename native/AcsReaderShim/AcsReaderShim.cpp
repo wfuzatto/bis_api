@@ -6,6 +6,7 @@
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <cstdarg>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -29,6 +30,48 @@ namespace
     constexpr short ERR_READ = -2005;
     constexpr short ERR_WRITE = -2006;
     constexpr short ERR_KEY = -2007;
+
+    // Opt-in technical trace. Never pass credentials, keys or block data here.
+    void Trace(const char* format, ...)
+    {
+        const DWORD savedError = GetLastError();
+        char enabled[4]{};
+        if (GetEnvironmentVariableA("BIS_API_SHIM_TRACE", enabled, sizeof(enabled)) != 1 || enabled[0] != '1')
+        {
+            SetLastError(savedError);
+            return;
+        }
+        CreateDirectoryW(L"C:\\ProgramData\\BisApi", nullptr);
+        CreateDirectoryW(L"C:\\ProgramData\\BisApi\\logs", nullptr);
+        HANDLE file = CreateFileW(L"C:\\ProgramData\\BisApi\\logs\\shim-trace.log", FILE_APPEND_DATA,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file != INVALID_HANDLE_VALUE)
+        {
+            SYSTEMTIME time{};
+            GetLocalTime(&time);
+            char detail[1400]{};
+            va_list args;
+            va_start(args, format);
+            vsnprintf(detail, sizeof(detail), format, args);
+            va_end(args);
+            char line[1600]{};
+            const int length = snprintf(line, sizeof(line),
+                "%04u-%02u-%02uT%02u:%02u:%02u.%03u pid=%lu %s\r\n",
+                time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute,
+                time.wSecond, time.wMilliseconds, GetCurrentProcessId(), detail);
+            DWORD written = 0;
+            if (length > 0 && length < static_cast<int>(sizeof(line)))
+                WriteFile(file, line, static_cast<DWORD>(length), &written, nullptr);
+            CloseHandle(file);
+        }
+        SetLastError(savedError);
+    }
+
+    short TraceReturn(const char* name, short rc)
+    {
+        Trace("RETURN %s = %d", name, static_cast<int>(rc));
+        return rc;
+    }
 
     void DisconnectCard()
     {
@@ -56,12 +99,16 @@ namespace
         DWORD chars = SCARD_AUTOALLOCATE;
         LPSTR multi = nullptr;
         LONG rc = SCardListReadersA(context, nullptr, reinterpret_cast<LPSTR>(&multi), &chars);
+        Trace("SCardListReaders rc=%ld hex=0x%08lX", rc, static_cast<unsigned long>(rc));
         if (rc != SCARD_S_SUCCESS)
             return {};
 
         std::vector<std::string> result;
         for (const char* p = multi; p && *p; p += std::strlen(p) + 1)
+        {
             result.emplace_back(p);
+            Trace("enumerated reader=%s", p);
+        }
         if (multi)
             SCardFreeMemory(context, multi);
         return result;
@@ -82,6 +129,7 @@ namespace
         if (g_context == 0)
         {
             LONG rc = SCardEstablishContext(SCARD_SCOPE_SYSTEM, nullptr, nullptr, &g_context);
+            Trace("SCardEstablishContext rc=%ld hex=0x%08lX", rc, static_cast<unsigned long>(rc));
             if (rc != SCARD_S_SUCCESS)
                 return ERR_OPEN;
         }
@@ -97,11 +145,13 @@ namespace
         DWORD count = GetEnvironmentVariableA("BIS_API_PCSC_READER", preferred, static_cast<DWORD>(sizeof(preferred)));
         if (count > 0 && count < sizeof(preferred))
         {
+            Trace("requested reader=%s", preferred);
             for (const auto& reader : readers)
             {
                 if (_stricmp(reader.c_str(), preferred) == 0)
                 {
                     g_reader = reader;
+                    Trace("selected reader=%s", g_reader.c_str());
                     return OK;
                 }
             }
@@ -113,11 +163,13 @@ namespace
             if (ContainsInsensitive(reader, "ACR122"))
             {
                 g_reader = reader;
+                Trace("selected reader=%s", g_reader.c_str());
                 return OK;
             }
         }
 
         g_reader = readers.front();
+        Trace("selected reader=%s", g_reader.c_str());
         return OK;
     }
 
@@ -136,6 +188,8 @@ namespace
             SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1,
             &g_card,
             &g_protocol);
+        Trace("SCardConnect rc=%ld hex=0x%08lX protocol=%lu", status,
+            static_cast<unsigned long>(status), g_protocol);
         if (status == SCARD_E_NO_SMARTCARD || status == SCARD_W_REMOVED_CARD)
             return ERR_NO_CARD;
         if (status != SCARD_S_SUCCESS)
@@ -163,6 +217,8 @@ namespace
             nullptr,
             recv.data(),
             &recvLength);
+        Trace("SCardTransmit ins=0x%02X rc=%ld hex=0x%08lX", commandLength > 1 ? command[1] : 0,
+            rc, static_cast<unsigned long>(rc));
 
         if (rc == SCARD_W_REMOVED_CARD || rc == SCARD_E_NO_SMARTCARD || rc == SCARD_E_INVALID_HANDLE)
         {
@@ -173,6 +229,9 @@ namespace
             return ERR_TRANSMIT;
 
         response.assign(recv.begin(), recv.begin() + recvLength);
+        if (recvLength >= 2)
+            Trace("APDU ins=0x%02X SW=%02X%02X", commandLength > 1 ? command[1] : 0,
+                recv[recvLength - 2], recv[recvLength - 1]);
         return OK;
     }
 
@@ -273,13 +332,19 @@ namespace
     };
 }
 
-extern "C" short __stdcall acr_120Open(BYTE, BYTE* versionLength, BYTE* versionInfo, BYTE* status)
+extern "C" short __stdcall acr_120Open(BYTE port, BYTE* versionLength, BYTE* versionInfo, BYTE* status)
 {
     ExclusiveLock lock;
+    Trace("ENTER acr_120Open port=%u", port);
+    HMODULE module = nullptr;
+    char modulePath[MAX_PATH]{};
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCSTR>(&acr_120Open), &module) && GetModuleFileNameA(module, modulePath, MAX_PATH))
+        Trace("shim module=%s", modulePath);
     ReleaseContext();
     short rc = EnsureContextAndReader();
     if (rc != OK)
-        return rc;
+        return TraceReturn("acr_120Open", rc);
 
     static const char version[] = "BIS-PCSC-ACR122-1.0";
     if (versionLength)
@@ -288,19 +353,20 @@ extern "C" short __stdcall acr_120Open(BYTE, BYTE* versionLength, BYTE* versionI
         std::memcpy(versionInfo, version, sizeof(version) - 1);
     if (status)
         *status = 0;
-    return OK;
+    return TraceReturn("acr_120Open", OK);
 }
 
 extern "C" short __stdcall acr_120Select(BYTE* tagType, BYTE* tagLength, BYTE* serial)
 {
     ExclusiveLock lock;
+    Trace("ENTER acr_120Select UID_APDU=FF CA 00 00 00");
     const BYTE command[] = {0xFF, 0xCA, 0x00, 0x00, 0x00};
     std::vector<BYTE> response;
     short rc = Transmit(command, static_cast<DWORD>(sizeof(command)), response);
     if (rc != OK)
-        return rc;
+        return TraceReturn("acr_120Select", rc);
     if (!Is9000(response) || response.size() < 6)
-        return ERR_NO_CARD;
+        return TraceReturn("acr_120Select", ERR_NO_CARD);
 
     size_t uidLength = response.size() - 2;
     if (uidLength > 10)
@@ -311,35 +377,43 @@ extern "C" short __stdcall acr_120Select(BYTE* tagType, BYTE* tagLength, BYTE* s
         *tagLength = static_cast<BYTE>(uidLength);
     if (serial)
         std::memcpy(serial, response.data(), uidLength);
-    return OK;
+    char uid[21]{};
+    for (size_t i = 0; i < uidLength; ++i)
+        snprintf(uid + 2 * i, sizeof(uid) - 2 * i, "%02X", response[i]);
+    Trace("UID=%s length=%u", uid, static_cast<unsigned>(uidLength));
+    return TraceReturn("acr_120Select", OK);
 }
 
-extern "C" short __stdcall acr_120Read(BYTE, BYTE block, BYTE keyType, BYTE* key, int, BYTE* output16)
+extern "C" short __stdcall acr_120Read(BYTE sector, BYTE block, BYTE keyType, BYTE* key, int, BYTE* output16)
 {
     ExclusiveLock lock;
+    Trace("ENTER acr_120Read sector=%u block=%u keyType=%u", sector, block, keyType);
     if (!output16)
-        return ERR_READ;
+        return TraceReturn("acr_120Read", ERR_READ);
     short rc = Authenticate(block, keyType, key);
+    Trace("acr_120Read authentication result=%d", rc);
     if (rc != OK)
-        return rc;
+        return TraceReturn("acr_120Read", rc);
 
     const BYTE command[] = {0xFF, 0xB0, 0x00, block, 0x10};
     std::vector<BYTE> response;
     rc = Transmit(command, static_cast<DWORD>(sizeof(command)), response);
     if (rc != OK || !Is9000(response) || response.size() < 18)
-        return ERR_READ;
+        return TraceReturn("acr_120Read", ERR_READ);
     std::memcpy(output16, response.data(), 16);
-    return OK;
+    return TraceReturn("acr_120Read", OK);
 }
 
-extern "C" short __stdcall acr_120Write(BYTE, BYTE block, BYTE keyType, BYTE* key, int, BYTE* data16, int)
+extern "C" short __stdcall acr_120Write(BYTE sector, BYTE block, BYTE keyType, BYTE* key, int, BYTE* data16, int)
 {
     ExclusiveLock lock;
+    Trace("ENTER acr_120Write sector=%u block=%u keyType=%u", sector, block, keyType);
     if (!data16)
-        return ERR_WRITE;
+        return TraceReturn("acr_120Write", ERR_WRITE);
     short rc = Authenticate(block, keyType, key);
+    Trace("acr_120Write authentication result=%d", rc);
     if (rc != OK)
-        return rc;
+        return TraceReturn("acr_120Write", rc);
 
     std::array<BYTE, 21> command{};
     command[0] = 0xFF;
@@ -350,15 +424,17 @@ extern "C" short __stdcall acr_120Write(BYTE, BYTE block, BYTE keyType, BYTE* ke
     std::copy(data16, data16 + 16, command.begin() + 5);
 
     std::vector<BYTE> response;
+    Trace("acr_120Write sending update block=%u", block);
     rc = Transmit(command.data(), static_cast<DWORD>(command.size()), response);
-    return rc == OK && Is9000(response) ? OK : ERR_WRITE;
+    return TraceReturn("acr_120Write", rc == OK && Is9000(response) ? OK : ERR_WRITE);
 }
 
 extern "C" short __stdcall acr_120Close()
 {
     ExclusiveLock lock;
+    Trace("ENTER acr_120Close");
     ReleaseContext();
-    return OK;
+    return TraceReturn("acr_120Close", OK);
 }
 
 extern "C" short __stdcall acr_120Beep(BYTE)

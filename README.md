@@ -153,7 +153,14 @@ Para o backend ACR120 legado existe `scripts/install-vendor-dlls.ps1`.
 - `GET /api/pcsc/probe?reader=...`
 - `GET /api/vendor/status`
 - `GET /api/vendor/serial`
+- `GET /api/vendor/read-snr` (somente leitura, pelo codec original)
 - `POST /api/hotel-card/encode`
+
+O backend ACS usa `Port=1`, `ReaderModel=4`, `SectorNo=0` e a ordem
+`Write_Guest_Card(port, readerModel, sectorNo, ...)`. O seletor `3` do codec
+corresponde a outro backend, não ao shim `AcsReader.dll`.
+Veja [ABI e diagnóstico do backend ACS](docs/ACS_CODEC_INTEROP.md) para evidências,
+trace seguro e interpretação do serial retornado por `Read_Snr`.
 
 Os endpoints ACR120 de laboratório anteriores foram preservados para rollback e comparação.
 

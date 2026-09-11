@@ -1,6 +1,7 @@
 param(
     [string]$Configuration = "Release",
-    [string]$OutputDir = ""
+    [string]$OutputDir = "",
+    [string]$LlvmMingwBin = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,6 +9,16 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Native = Join-Path $Root "native\AcsReaderShim"
 if (-not $OutputDir) { $OutputDir = Join-Path $Root "artifacts\native-win-x86" }
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+
+if ($LlvmMingwBin) {
+    $compiler = Join-Path $LlvmMingwBin 'i686-w64-mingw32-clang++.exe'
+    $out = Join-Path $OutputDir 'AcsReader.dll'
+    & $compiler -std=c++17 -O2 -static -shared '-Wl,--kill-at' -o $out `
+        (Join-Path $Native 'AcsReaderShim.cpp') (Join-Path $Native 'AcsReaderShim.mingw.def') -lwinscard
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { throw 'Shim x86 build failed' }
+    Write-Host "Shim x86: $out"
+    return
+}
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vswhere)) {
