@@ -57,16 +57,40 @@ O instalador:
 - valida SHA-256 do pacote e do `AcsReader.dll` PC/SC;
 - limpa a pasta temporária antes de extrair uma nova versão;
 - inicia/verifica o serviço Windows `SCardSvr`;
-- preserva `appsettings.Local.json` e HPASS em atualizações;
+- preserva `appsettings.Local.json` e o HPASS local em atualizações;
+- quando o HPASS ainda não existe, tenta importar automaticamente `HPASS` da seção `[DADOS]` de `ConfPmsSaga.ini`;
+- nunca imprime o HPASS no terminal nem o inclui em logs;
 - tenta localizar `btlock57L.dll` + `Data.dll` em uma instalação local licenciada do BIS/PMS Saga;
 - instala/atualiza o serviço Windows `BisApi`;
 - detecta automaticamente o nome PC/SC do ACR122 quando disponível;
 - confirma que a porta `8765` está somente no loopback;
 - mantém `EnableHotelCardWrites=false` após a instalação.
 
-DLLs proprietárias Be-Tech/Saga **não são publicadas no GitHub**. Se o codec não for localizado automaticamente, o serviço é instalado em modo diagnóstico e pode ser completado depois com a instalação local licenciada.
+DLLs proprietárias Be-Tech/Saga **não são publicadas no GitHub**. O HPASS também **não é versionado nem incluído no ZIP público**. Ele fica somente na configuração local do Windows.
 
 O pacote é self-contained: **não instala .NET SDK, Visual Studio, Docker ou XAMPP** no totem.
+
+## HPASS e uso em outro hotel
+
+O `HotelPassword`/HPASS é uma configuração específica da instalação do hotel. O instalador não pede esse valor se ele já estiver configurado: atualizações preservam automaticamente o valor existente em:
+
+```text
+C:\Program Files\BisApi\appsettings.Local.json
+```
+
+Em instalação nova, o instalador procura `ConfPmsSaga.ini` e importa a chave `HPASS` da seção `[DADOS]` silenciosamente.
+
+Para outro hotel, **não reutilize o HPASS de outra unidade**. Faça uma destas opções:
+
+1. disponibilize ao instalador o `ConfPmsSaga.ini` daquele hotel;
+2. configure localmente `BeTech57.HotelPassword` em `appsettings.Local.json`; ou
+3. execute o instalador com:
+
+```powershell
+.\BisApi-Install.bat -PmsConfigFile "C:\caminho\ConfPmsSaga.ini"
+```
+
+Nenhum HPASS deve ser colocado em commit, README, código-fonte ou artefato público.
 
 ## Instalação standalone manual
 
@@ -91,7 +115,9 @@ Após validar o ACR122, execute `install-service.ps1` como Administrador.
 
 ## Configuração local
 
-Copie/edite `appsettings.Local.json`. Esse arquivo é ignorado pelo Git porque pode conter a senha HPASS e chaves de compatibilidade.
+`appsettings.Local.json` é ignorado pelo Git porque pode conter HPASS e chaves de compatibilidade.
+
+Exemplo sem segredo real:
 
 ```json
 {
@@ -101,7 +127,7 @@ Copie/edite `appsettings.Local.json`. Esse arquivo é ignorado pelo Git porque p
   },
   "BeTech57": {
     "PcscReader": "ACS ACR122 0",
-    "HotelPassword": "000000"
+    "HotelPassword": "<HPASS_LOCAL_DO_HOTEL>"
   }
 }
 ```
@@ -134,7 +160,8 @@ Os endpoints ACR120 de laboratório anteriores foram preservados para rollback e
 ## Segurança
 
 - bind padrão somente em loopback (`127.0.0.1`);
-- segredos fora do repositório;
+- segredos fora do repositório e dos artefatos públicos;
+- HPASS preservado somente na configuração local do Windows;
 - escrita de cartão desabilitada por padrão;
 - raw writes e sector trailers bloqueados por padrão;
 - primeiro teste deve ser feito em cartão/fechadura autorizados de laboratório.

@@ -2,6 +2,7 @@
 param(
     [string]$PackagePath,
     [string]$VendorFolder,
+    [string]$PmsConfigFile,
     [switch]$NoOpenDashboard
 )
 
@@ -21,6 +22,7 @@ function Invoke-SelfElevated {
     $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
     if ($PackagePath) { $arguments += " -PackagePath `"$PackagePath`"" }
     if ($VendorFolder) { $arguments += " -VendorFolder `"$VendorFolder`"" }
+    if ($PmsConfigFile) { $arguments += " -PmsConfigFile `"$PmsConfigFile`"" }
     if ($NoOpenDashboard) { $arguments += ' -NoOpenDashboard' }
 
     $process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $arguments -Wait -PassThru
@@ -58,38 +60,191 @@ function Ensure-JsonProperty {
     }
 }
 
-function Set-SafeConfig {
+function Read-LocalConfig {
     param([Parameter(Mandatory = $true)][string]$Path)
 
     if (Test-Path $Path) {
-        $cfg = Get-Content -Raw $Path | ConvertFrom-Json
+        try {
+            return (Get-Content -Raw $Path | ConvertFrom-Json)
+        }
+        catch {
+            throw "Configuracao JSON invalida em $Path"
+        }
     }
-    else {
-        $cfg = [pscustomobject]@{}
+    return [pscustomobject]@{}
+}
+
+function Ensure-ConfigShape {
+    param([Parameter(Mandatory = $true)]$Config)
+
+    if (-not ($Config.PSObject.Properties.Name -contains 'BisApi') -or $null -eq $Config.BisApi) {
+        Ensure-JsonProperty $Config 'BisApi' ([pscustomobject]@{})
+    }
+    if (-not ($Config.PSObject.Properties.Name -contains 'BeTech57') -or $null -eq $Config.BeTech57) {
+        Ensure-JsonProperty $Config 'BeTech57' ([pscustomobject]@{})
     }
 
-    if (-not ($cfg.PSObject.Properties.Name -contains 'BisApi') -or $null -eq $cfg.BisApi) {
-        Ensure-JsonProperty $cfg 'BisApi' ([pscustomobject]@{})
+    Ensure-JsonProperty $Config.BisApi 'Url' 'http://127.0.0.1:8765'
+    Ensure-JsonProperty $Config.BisApi 'EnableHotelCardWrites' $false
+    Ensure-JsonProperty $Config.BisApi 'RequireWriteChallenge' 'GRAVAR'
+
+    if (-not ($Config.BeTech57.PSObject.Properties.Name -contains 'PcscReader')) {
+        Ensure-JsonProperty $Config.BeTech57 'PcscReader' ''
     }
-    if (-not ($cfg.PSObject.Properties.Name -contains 'BeTech57') -or $null -eq $cfg.BeTech57) {
-        Ensure-JsonProperty $cfg 'BeTech57' ([pscustomobject]@{})
+    if (-not ($Config.BeTech57.PSObject.Properties.Name -contains 'HotelPassword')) {
+        Ensure-JsonProperty $Config.BeTech57 'HotelPassword' ''
+    }
+    elseif ([string]$Config.BeTech57.HotelPassword -eq 'COLOQUE_AQUI_OS_6_DIGITOS') {
+        $Config.BeTech57.HotelPassword = ''
     }
 
-    Ensure-JsonProperty $cfg.BisApi 'Url' 'http://127.0.0.1:8765'
+    return $Config
+}
+
+function Save-LocalConfig {
+    param(
+        [Parameter(Mandatory = $true)]$Config,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+    $Config | ConvertTo-Json -Depth 10 | Set-Content -Path $Path -Encoding UTF8
+}
+
+function Set-SafeConfig {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $cfg = Ensure-ConfigShape (Read-LocalConfig $Path)
+    Save-LocalConfig -Config $cfg -Path $Path
+}
+
+function Get-HotelPasswordFromConfig {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path $Path)) { return $null }
+    $cfg = Ensure-ConfigShape (Read-LocalConfig $Path)
+    $value = ([string]$cfg.BeTech57.HotelPassword).Trim()
+    if ($value -match '^\d{6}$') { return $value }
+    return $null
+}
+
+function Set-HotelPasswordInConfig {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$HotelPassword
+    )
+
+    if ($HotelPassword -notmatch '^\d{6}$') {
+        throw 'HPASS invalido: esperado valor numerico de 6 digitos.'
+    }
+
+    $cfg = Ensure-ConfigShape (Read-LocalConfig $Path)
+    Ensure-JsonProperty $cfg.BeTech57 'HotelPassword' $HotelPassword
     Ensure-JsonProperty $cfg.BisApi 'EnableHotelCardWrites' $false
-    Ensure-JsonProperty $cfg.BisApi 'RequireWriteChallenge' 'GRAVAR'
+    Save-LocalConfig -Config $cfg -Path $Path
+}
 
-    if (-not ($cfg.BeTech57.PSObject.Properties.Name -contains 'PcscReader')) {
-        Ensure-JsonProperty $cfg.BeTech57 'PcscReader' ''
+function Read-HpassFromConfPmsSaga {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path $Path)) { return $null }
+
+    $inDados = $false
+    foreach ($rawLine in Get-Content -LiteralPath $Path -ErrorAction Stop) {
+        $line = ([string]$rawLine).Trim()
+        if ($line -match '^\[(.+)\]$') {
+            $inDados = ($matches[1] -ieq 'DADOS')
+            continue
+        }
+        if ($inDados -and $line -match '^HPASS\s*=\s*(\d{6})\s*$') {
+            return $matches[1]
+        }
     }
-    if (-not ($cfg.BeTech57.PSObject.Properties.Name -contains 'HotelPassword')) {
-        Ensure-JsonProperty $cfg.BeTech57 'HotelPassword' ''
-    }
-    elseif ([string]$cfg.BeTech57.HotelPassword -eq 'COLOQUE_AQUI_OS_6_DIGITOS') {
-        $cfg.BeTech57.HotelPassword = ''
+    return $null
+}
+
+function Find-ConfPmsSagaFile {
+    param(
+        [string]$ExplicitFile,
+        [string]$PreferredFolder,
+        [string]$VendorSource
+    )
+
+    if ($ExplicitFile) {
+        if (-not (Test-Path $ExplicitFile)) {
+            throw "ConfPmsSaga.ini informado nao foi encontrado: $ExplicitFile"
+        }
+        return (Resolve-Path $ExplicitFile).Path
     }
 
-    $cfg | ConvertTo-Json -Depth 10 | Set-Content -Path $Path -Encoding UTF8
+    $besideInstaller = Join-Path $PSScriptRoot 'ConfPmsSaga.ini'
+    if (Test-Path $besideInstaller) { return (Resolve-Path $besideInstaller).Path }
+
+    $roots = @()
+    if ($PreferredFolder -and (Test-Path $PreferredFolder)) { $roots += $PreferredFolder }
+    if ($VendorSource -and (Test-Path $VendorSource)) {
+        $roots += $VendorSource
+        try { $roots += (Split-Path $VendorSource -Parent) } catch { }
+    }
+
+    $roots += @(
+        (Join-Path $PSScriptRoot 'vendor'),
+        'C:\BIS',
+        'C:\Saga',
+        'C:\Be-Tech',
+        'C:\BTLock',
+        (Join-Path $env:USERPROFILE 'Desktop'),
+        (Join-Path $env:USERPROFILE 'Downloads')
+    )
+
+    foreach ($root in ($roots | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique)) {
+        try {
+            $ini = Get-ChildItem -Path $root -Filter 'ConfPmsSaga.ini' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($ini) { return $ini.FullName }
+        }
+        catch { }
+    }
+
+    $programRoots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ -and (Test-Path $_) }
+    foreach ($root in $programRoots) {
+        $candidateDirs = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue | Where-Object {
+            $_.Name -match 'BIS|Saga|Be-Tech|BTLock|PMS'
+        }
+        foreach ($dir in $candidateDirs) {
+            try {
+                $ini = Get-ChildItem -Path $dir.FullName -Filter 'ConfPmsSaga.ini' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($ini) { return $ini.FullName }
+            }
+            catch { }
+        }
+    }
+
+    return $null
+}
+
+function Import-HpassIfMissing {
+    param(
+        [Parameter(Mandatory = $true)][string]$ConfigPath,
+        [string]$ExistingPassword,
+        [string]$ExplicitFile,
+        [string]$PreferredFolder,
+        [string]$VendorSource
+    )
+
+    $current = Get-HotelPasswordFromConfig $ConfigPath
+    if ($current) { return 'PRESERVADO' }
+
+    if ($ExistingPassword -and $ExistingPassword -match '^\d{6}$') {
+        Set-HotelPasswordInConfig -Path $ConfigPath -HotelPassword $ExistingPassword
+        return 'PRESERVADO'
+    }
+
+    $ini = Find-ConfPmsSagaFile -ExplicitFile $ExplicitFile -PreferredFolder $PreferredFolder -VendorSource $VendorSource
+    if (-not $ini) { return 'NAO_ENCONTRADO' }
+
+    $hpass = Read-HpassFromConfPmsSaga -Path $ini
+    if (-not $hpass) { return 'INVALIDO' }
+
+    Set-HotelPasswordInConfig -Path $ConfigPath -HotelPassword $hpass
+    return 'IMPORTADO'
 }
 
 function Ensure-SmartCardService {
@@ -125,6 +280,14 @@ function Find-VendorCodecFolder {
         if ((Test-Path (Join-Path $PreferredFolder 'btlock57L.dll')) -and (Test-Path (Join-Path $PreferredFolder 'Data.dll'))) {
             return (Resolve-Path $PreferredFolder).Path
         }
+
+        try {
+            $codec = Get-ChildItem -Path $PreferredFolder -Filter 'btlock57L.dll' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($codec -and (Test-Path (Join-Path $codec.DirectoryName 'Data.dll'))) {
+                return $codec.DirectoryName
+            }
+        }
+        catch { }
     }
 
     $directCandidates = @(
@@ -184,6 +347,10 @@ Write-Host '=============================================' -ForegroundColor Dark
 Write-Host ' BIS API - Instalacao / Atualizacao Windows ' -ForegroundColor Cyan
 Write-Host '=============================================' -ForegroundColor DarkCyan
 Write-Host ''
+
+$installDir = Join-Path $env:ProgramFiles 'BisApi'
+$installedConfigBefore = Join-Path $installDir 'appsettings.Local.json'
+$preservedHotelPassword = Get-HotelPasswordFromConfig $installedConfigBefore
 
 $manifestPath = Join-Path $PSScriptRoot 'manifest.json'
 if (-not (Test-Path $manifestPath)) {
@@ -259,12 +426,39 @@ else {
     Write-Warning 'btlock57L.dll + Data.dll nao foram localizados. O servico sera instalado, mas emissao Be-Tech ficara indisponivel ate instalar o codec localmente.'
 }
 
-Set-SafeConfig (Join-Path $source 'appsettings.Local.json')
+$sourceConfig = Join-Path $source 'appsettings.Local.json'
+Set-SafeConfig $sourceConfig
+$hpassState = Import-HpassIfMissing `
+    -ConfigPath $sourceConfig `
+    -ExistingPassword $preservedHotelPassword `
+    -ExplicitFile $PmsConfigFile `
+    -PreferredFolder $VendorFolder `
+    -VendorSource $vendorSource
+
+switch ($hpassState) {
+    'PRESERVADO' { Write-Host 'HPASS local: preservado com seguranca.' -ForegroundColor Green }
+    'IMPORTADO'  { Write-Host 'HPASS local: importado automaticamente do PMS Saga.' -ForegroundColor Green }
+    'INVALIDO'   { Write-Warning 'ConfPmsSaga.ini encontrado, mas o HPASS nao possui o formato esperado de 6 digitos.' }
+    default      { Write-Warning 'HPASS nao localizado automaticamente. O BisApi sera mantido em modo diagnostico.' }
+}
+
 & (Join-Path $source 'install-service.ps1') -SourceFolder $source
 
-$installDir = Join-Path $env:ProgramFiles 'BisApi'
 $installedConfig = Join-Path $installDir 'appsettings.Local.json'
 Set-SafeConfig $installedConfig
+
+if (-not (Get-HotelPasswordFromConfig $installedConfig)) {
+    $postInstallHpassState = Import-HpassIfMissing `
+        -ConfigPath $installedConfig `
+        -ExistingPassword $preservedHotelPassword `
+        -ExplicitFile $PmsConfigFile `
+        -PreferredFolder $VendorFolder `
+        -VendorSource $vendorSource
+    if ($postInstallHpassState -eq 'IMPORTADO') {
+        Write-Host 'HPASS: armazenado somente na configuracao local do Windows.' -ForegroundColor Green
+    }
+}
+
 Restart-Service -Name 'BisApi' -Force
 $health = Wait-Api
 
@@ -278,17 +472,17 @@ catch {
 }
 
 if ($reader) {
-    $cfg = Get-Content -Raw $installedConfig | ConvertFrom-Json
+    $cfg = Ensure-ConfigShape (Read-LocalConfig $installedConfig)
     Ensure-JsonProperty $cfg.BeTech57 'PcscReader' ([string]$reader)
     Ensure-JsonProperty $cfg.BisApi 'EnableHotelCardWrites' $false
     Ensure-JsonProperty $cfg.BisApi 'RequireWriteChallenge' 'GRAVAR'
-    $cfg | ConvertTo-Json -Depth 10 | Set-Content -Path $installedConfig -Encoding UTF8
+    Save-LocalConfig -Config $cfg -Path $installedConfig
     Restart-Service -Name 'BisApi' -Force
     $health = Wait-Api
 }
 
 $vendorStatus = Invoke-RestMethod 'http://127.0.0.1:8765/api/vendor/status' -TimeoutSec 10
-$finalReaders = Invoke-RestMethod 'http://127.0.0.0.1:8765/api/pcsc/readers' -TimeoutSec 10
+$finalReaders = Invoke-RestMethod 'http://127.0.0.1:8765/api/pcsc/readers' -TimeoutSec 10
 $connections = @(Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue)
 $invalidBindings = @($connections | Where-Object { $_.LocalAddress -notin @('127.0.0.1', '::1') })
 if ($invalidBindings.Count -gt 0) {
@@ -305,7 +499,7 @@ $shimPresent = [bool]$vendorStatus.pcscShimPresent
 $readyForEnable = $codecPresent -and $shimPresent -and $hotelPasswordConfigured -and [bool]$reader
 
 Write-Host ''
-Write-Host '==============================================' -ForegroundColor DarkCyan
+Write-Host '=============================================' -ForegroundColor DarkCyan
 Write-Host ' BIS API - RESULTADO DA INSTALACAO ' -ForegroundColor Cyan
 Write-Host '=============================================' -ForegroundColor DarkCyan
 Write-Host ("Windows Smart Card ......... {0}" -f $smartCardService.Status)
@@ -329,7 +523,7 @@ if (-not $codecPresent) {
     Write-Warning 'Instale/copie localmente btlock57L.dll e Data.dll da instalacao licenciada do BIS/PMS Saga.'
 }
 if (-not $hotelPasswordConfigured) {
-    Write-Warning 'HPASS ainda nao esta configurado. Nenhum valor de senha foi exibido ou gravado em log.'
+    Write-Warning 'HPASS nao foi encontrado automaticamente. Coloque o ConfPmsSaga.ini do hotel ao lado do instalador ou configure BeTech57.HotelPassword somente no appsettings.Local.json local.'
 }
 
 if (-not $NoOpenDashboard) {
