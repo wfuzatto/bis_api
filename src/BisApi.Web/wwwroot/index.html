@@ -3,109 +3,95 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>BIS API Lab</title>
+  <title>BIS API Standalone</title>
   <style>
-    :root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#111827;background:#f3f4f6}
-    *{box-sizing:border-box} body{margin:0} header{background:#111827;color:white;padding:22px 28px} header h1{margin:0;font-size:22px} header p{margin:6px 0 0;color:#cbd5e1;font-size:14px}
-    main{max-width:1180px;margin:24px auto;padding:0 18px 40px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}.card{background:white;border:1px solid #e5e7eb;border-radius:14px;padding:18px;box-shadow:0 3px 12px rgba(0,0,0,.04)}
-    h2{font-size:16px;margin:0 0 14px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:120px}label{font-size:12px;color:#4b5563}input,select,button{border-radius:9px;border:1px solid #d1d5db;padding:10px 11px;font:inherit}button{cursor:pointer;background:#111827;color:white;border-color:#111827}button.secondary{background:white;color:#111827}button.danger{background:#991b1b;border-color:#991b1b}button:disabled{opacity:.45;cursor:not-allowed}.status{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}.pill{padding:6px 9px;border-radius:999px;background:#e5e7eb;font-size:12px}.pill.ok{background:#dcfce7;color:#166534}.pill.bad{background:#fee2e2;color:#991b1b}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.result{background:#f8fafc;border:1px solid #e5e7eb;border-radius:9px;padding:10px;min-height:42px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}.warning{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:9px;padding:10px;font-size:12px;margin-top:12px}.logs{height:260px;overflow:auto;background:#0f172a;color:#d1fae5;padding:12px;border-radius:10px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}.muted{font-size:12px;color:#6b7280}.full{grid-column:1/-1}
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#e5e7eb;background:#080b12;color-scheme:dark}
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 20% -10%,#18304b 0,#0a1019 35%,#080b12 70%);min-height:100vh}
+    header{border-bottom:1px solid #223044;background:rgba(8,11,18,.8);backdrop-filter:blur(12px);position:sticky;top:0;z-index:4}
+    .head{max-width:1240px;margin:auto;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:20px}.brand h1{font-size:20px;margin:0}.brand p{font-size:12px;color:#94a3b8;margin:5px 0 0}.badge{border:1px solid #36536f;background:#0d1b2a;border-radius:999px;padding:7px 10px;font-size:11px;color:#9fc6e8}
+    main{max-width:1240px;margin:0 auto;padding:22px}.statusbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.pill{padding:7px 10px;border-radius:999px;background:#172033;border:1px solid #26354c;font-size:12px;color:#cbd5e1}.pill.ok{background:#0c2d25;border-color:#17694f;color:#8df0c4}.pill.warn{background:#33260a;border-color:#6f5715;color:#f6d77b}.pill.bad{background:#36131a;border-color:#7b2636;color:#f3a4b3}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:15px}.card{grid-column:span 6;background:linear-gradient(180deg,rgba(20,28,42,.92),rgba(13,19,30,.96));border:1px solid #25344b;border-radius:16px;padding:18px;box-shadow:0 12px 35px rgba(0,0,0,.18)}.card.full{grid-column:1/-1}.card.third{grid-column:span 4}
+    h2{font-size:15px;margin:0 0 6px} .sub{color:#8292aa;font-size:12px;margin:0 0 16px;line-height:1.5}.row{display:flex;gap:9px;align-items:end;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px;min-width:130px;flex:1}label{font-size:11px;color:#98a6ba}input,select,button{border:1px solid #30415c;border-radius:10px;background:#0c1320;color:#e5e7eb;padding:10px 11px;font:inherit}input:focus,select:focus{outline:2px solid #2b6cb0;outline-offset:1px}button{cursor:pointer;background:#1e5f97;border-color:#2876b8;font-weight:650}button:hover{filter:brightness(1.1)}button.secondary{background:#162235;border-color:#32435e}button.danger{background:#8f2639;border-color:#b23a52}button:disabled{opacity:.45;cursor:not-allowed}
+    .result{margin-top:12px;border:1px solid #27364d;border-radius:10px;background:#090f19;padding:11px;min-height:45px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#b9c7d9}.hint{font-size:11px;color:#78879d;line-height:1.55;margin-top:10px}.warning{margin-top:12px;background:#30250b;border:1px solid #655016;color:#f4d475;border-radius:10px;padding:10px;font-size:11px;line-height:1.5}.success{margin-top:12px;background:#0b2b23;border:1px solid #17634b;color:#94e9c8;border-radius:10px;padding:10px;font-size:12px}
+    details{margin-top:13px;border-top:1px solid #28364b;padding-top:12px}summary{cursor:pointer;color:#9fb1c8;font-size:12px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.logs{height:230px;overflow:auto;background:#070b11;border:1px solid #243147;border-radius:11px;padding:12px;font:11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#9dd9c2;white-space:pre-wrap}
+    .metric{display:grid;grid-template-columns:145px 1fr;gap:7px;font-size:12px;margin-top:10px}.metric b{color:#8190a6;font-weight:500}.metric span{color:#d5deea}.sep{height:1px;background:#28364b;margin:14px 0}
+    @media(max-width:850px){.card,.card.third{grid-column:1/-1}.head{align-items:flex-start;flex-direction:column}.metric{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
-<header><h1>BIS API Lab</h1><p>Teste direto do gravador ACR120 / RW-41 — sem abrir o BIS Hotel</p></header>
+<header><div class="head"><div class="brand"><h1>BIS API Standalone</h1><p>Be-Tech / Saga BIS 5.7 · ACS ACR122U · PC/SC · laboratório local</p></div><div class="badge">127.0.0.1:8765 · somente local</div></div></header>
 <main>
-  <div id="status" class="status"></div>
+  <div id="statusbar" class="statusbar"></div>
   <div class="grid">
-    <section class="card">
-      <h2>1. Serviço e DLL</h2>
-      <div class="row">
-        <button onclick="health()">Atualizar status</button>
-        <button class="secondary" onclick="dllVersion()">Versão da DLL</button>
-      </div>
-      <div id="serviceResult" class="result mono" style="margin-top:12px"></div>
+    <section class="card third">
+      <h2>Serviço</h2><p class="sub">Estado do processo e dos componentes locais.</p>
+      <div class="row"><button onclick="refreshAll()">Atualizar</button></div>
+      <div id="healthResult" class="result"></div>
     </section>
 
-    <section class="card">
-      <h2>2. Gravador</h2>
-      <div class="row">
-        <div class="field"><label>Porta</label><select id="port"></select></div>
-        <button onclick="openReader()">Conectar</button>
-        <button class="secondary" onclick="closeReader()">Desconectar</button>
-      </div>
-      <div id="readerResult" class="result mono" style="margin-top:12px"></div>
+    <section class="card third">
+      <h2>ACR122 / PC/SC</h2><p class="sub">Detecta o leitor pelo Smart Card Resource Manager do Windows.</p>
+      <div class="field"><label>Leitor</label><select id="reader"></select></div>
+      <div class="row" style="margin-top:10px"><button onclick="loadReaders()">Listar leitores</button><button class="secondary" onclick="probeCard()">Ler ATR + UID</button></div>
+      <div id="pcscResult" class="result"></div>
     </section>
 
-    <section class="card">
-      <h2>3. Cartão</h2>
-      <div class="row"><button onclick="selectCard()">Detectar cartão / UID</button></div>
-      <div id="cardResult" class="result mono" style="margin-top:12px"></div>
-      <p class="muted">Deixe apenas um cartão sobre o gravador.</p>
-    </section>
-
-    <section class="card">
-      <h2>4. Autenticação MIFARE</h2>
-      <div class="row">
-        <div class="field"><label>Setor</label><input id="sector" type="number" min="0" max="15" value="0"></div>
-        <div class="field"><label>Chave</label><select id="keyType"><option>DefaultA</option><option>DefaultB</option><option>DefaultF</option><option>CustomA</option><option>CustomB</option></select></div>
-      </div>
-      <div class="field" style="margin-top:8px"><label>Key HEX (somente CustomA/B, 6 bytes)</label><input id="keyHex" class="mono" placeholder="FFFFFFFFFFFF"></div>
-      <div class="row" style="margin-top:10px"><button onclick="login()">Autenticar setor</button><button class="secondary" onclick="dumpSector()">Dump do setor</button></div>
-      <div id="authResult" class="result mono" style="margin-top:12px"></div>
-    </section>
-
-    <section class="card">
-      <h2>5. Ler bloco</h2>
-      <div class="row"><div class="field"><label>Bloco físico</label><input id="readBlock" type="number" min="0" max="63" value="1"></div><button onclick="readBlock()">Ler 16 bytes</button></div>
-      <div id="readResult" class="result mono" style="margin-top:12px"></div>
-    </section>
-
-    <section class="card">
-      <h2>6. Escrita crua</h2>
-      <div class="row"><div class="field"><label>Bloco físico</label><input id="writeBlock" type="number" min="0" max="63" value="1"></div></div>
-      <div class="field" style="margin-top:8px"><label>16 bytes em HEX</label><input id="writeData" class="mono" placeholder="00000000000000000000000000000000"></div>
-      <div class="field" style="margin-top:8px"><label>Confirmação</label><input id="writeConfirmation" value="GRAVAR"></div>
-      <div class="row" style="margin-top:10px"><button class="danger" onclick="writeBlock()">Gravar bloco</button></div>
-      <div id="writeResult" class="result mono" style="margin-top:12px"></div>
-      <div class="warning">A escrita vem desativada no servidor. Não grave sector trailers (blocos 3, 7, 11...) durante os testes.</div>
+    <section class="card third">
+      <h2>Codec Be-Tech 5.7L</h2><p class="sub">Usa o codec original e nosso AcsReader.dll PC/SC.</p>
+      <div id="vendorMetrics" class="metric"></div>
+      <div class="row" style="margin-top:14px"><button class="secondary" onclick="vendorStatus()">Verificar codec</button><button class="secondary" onclick="serialNow()">Gerar serial</button></div>
+      <div id="vendorResult" class="result"></div>
     </section>
 
     <section class="card full">
-      <h2>7. Futuro cartão de quarto</h2>
+      <h2>Emitir cartão de hóspede</h2>
+      <p class="sub">O quarto é normalizado para 6 dígitos (ex.: 1200 → 001200). A senha do hotel nunca é enviada pelo navegador; fica somente em <span class="mono">appsettings.Local.json</span>.</p>
       <div class="row">
-        <div class="field"><label>Quarto</label><input id="room" value="101"></div>
-        <div class="field"><label>Entrada</label><input id="validFrom" type="datetime-local"></div>
-        <div class="field"><label>Saída</label><input id="validUntil" type="datetime-local"></div>
-        <button onclick="hotelCardProbe()">Testar endpoint</button>
+        <div class="field"><label>Quarto / Door ID</label><input id="room" value="1200" maxlength="6"></div>
+        <div class="field"><label>Validade inicial</label><input id="validFrom" type="datetime-local"></div>
+        <div class="field"><label>Validade final</label><input id="validUntil" type="datetime-local"></div>
+        <div class="field"><label>Confirmação</label><input id="confirmation" value="GRAVAR" autocomplete="off"></div>
       </div>
-      <div id="hotelResult" class="result mono" style="margin-top:12px"></div>
-      <p class="muted">Este endpoint ficará responsável por montar o cartão Saga/BIS depois que identificarmos o layout de dados, chaves e validações.</p>
+      <details>
+        <summary>Opções avançadas do cartão</summary>
+        <div class="row" style="margin-top:12px">
+          <div class="field"><label>Guest Serial (vazio = automático)</label><input id="guestSerial" type="number" min="1" placeholder="automático"></div>
+          <div class="field"><label>Holder Serial (0 = teste PMS)</label><input id="holderSerial" type="number" min="0" value="0"></div>
+          <div class="field"><label>Guest Index</label><input id="guestIndex" type="number" min="1" max="255" value="2"></div>
+          <div class="field"><label>SuitDoor (12 hex)</label><input id="suitDoor" class="mono" value="000000000000" maxlength="12"></div>
+          <div class="field"><label>PublicDoor (8 hex)</label><input id="publicDoor" class="mono" value="00000000" maxlength="8"></div>
+        </div>
+      </details>
+      <div class="row" style="margin-top:14px"><button class="danger" id="writeButton" onclick="writeGuestCard()">Gravar cartão</button><button class="secondary" onclick="probeCard()">Conferir cartão antes</button></div>
+      <div class="warning">Use primeiro um cartão de laboratório. O serviço bloqueia a emissão enquanto <span class="mono">EnableHotelCardWrites</span> estiver false. Não use a escrita crua de sector trailer para esta integração.</div>
+      <div id="writeResult" class="result"></div>
     </section>
 
-    <section class="card full"><h2>Log</h2><div id="logs" class="logs"></div></section>
+    <section class="card full">
+      <h2>Diagnóstico</h2><p class="sub">Log somente desta página. Não contém a senha local do hotel.</p>
+      <div id="logs" class="logs"></div>
+    </section>
   </div>
 </main>
 <script>
 const $=id=>document.getElementById(id);
-for(let i=0;i<8;i++){const o=document.createElement('option');o.value=i;o.textContent=`USB${i+1} (${i})`;$('port').appendChild(o)}
-const now=new Date(); const later=new Date(Date.now()+24*3600*1000);
-$('validFrom').value=localInput(now); $('validUntil').value=localInput(later);
 function localInput(d){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`}
+$('validFrom').value=localInput(new Date()); $('validUntil').value=localInput(new Date(Date.now()+24*3600*1000));
 function log(msg,obj){const line=`[${new Date().toLocaleTimeString()}] ${msg}${obj!==undefined?' '+JSON.stringify(obj):''}\n`;$('logs').textContent+=line;$('logs').scrollTop=$('logs').scrollHeight}
-async function api(url,opt={}){try{const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opt});let body;try{body=await r.json()}catch{body={status:r.status}};log(`${opt.method||'GET'} ${url} -> ${r.status}`,body);if(!r.ok)throw Object.assign(new Error(body.error||body.message||`HTTP ${r.status}`),{body});return body}catch(e){log('ERRO',e.body||e.message);throw e}}
+async function api(url,opt={}){const options={headers:{'Content-Type':'application/json'},...opt};try{const r=await fetch(url,options);let body;try{body=await r.json()}catch{body={status:r.status}};log(`${options.method||'GET'} ${url} -> ${r.status}`,body);if(!r.ok)throw Object.assign(new Error(body.error||body.message||`HTTP ${r.status}`),{body,status:r.status});return body}catch(e){if(!e.status)log('ERRO DE REDE',e.message);throw e}}
 function show(id,data){$(id).textContent=typeof data==='string'?data:JSON.stringify(data,null,2)}
-async function health(){try{const x=await api('/api/health');show('serviceResult',x);const s=$('status');s.innerHTML='';pill(s,'API online',true);pill(s,x.is64BitProcess?'Processo x64 (ERRADO)':'Processo x86',!x.is64BitProcess);pill(s,x.dllPresent?'acr120u.dll encontrada':'DLL ausente',x.dllPresent);pill(s,x.readerOpen?'Gravador conectado':'Gravador desconectado',x.readerOpen)}catch(e){show('serviceResult',e.message)}}
-function pill(parent,text,ok){const x=document.createElement('span');x.className='pill '+(ok?'ok':'bad');x.textContent=text;parent.appendChild(x)}
-async function dllVersion(){try{show('serviceResult',await api('/api/reader/dll-version'))}catch(e){show('serviceResult',e.body||e.message)}}
-async function openReader(){try{show('readerResult',await api('/api/reader/open',{method:'POST',body:JSON.stringify({port:Number($('port').value)})}));health()}catch(e){show('readerResult',e.body||e.message)}}
-async function closeReader(){try{show('readerResult',await api('/api/reader/close',{method:'POST'}));health()}catch(e){show('readerResult',e.body||e.message)}}
-async function selectCard(){try{show('cardResult',await api('/api/card/select'))}catch(e){show('cardResult',e.body||e.message)}}
-function authBody(){return {sector:Number($('sector').value),keyType:$('keyType').value,keyHex:$('keyHex').value||null}}
-async function login(){try{show('authResult',await api('/api/card/login',{method:'POST',body:JSON.stringify(authBody())}))}catch(e){show('authResult',e.body||e.message)}}
-async function dumpSector(){try{show('authResult',await api('/api/card/dump-sector',{method:'POST',body:JSON.stringify(authBody())}))}catch(e){show('authResult',e.body||e.message)}}
-async function readBlock(){try{show('readResult',await api('/api/card/block/'+Number($('readBlock').value)))}catch(e){show('readResult',e.body||e.message)}}
-async function writeBlock(){if(!confirm('Gravar 16 bytes no cartão? Use somente cartão de teste.'))return;try{show('writeResult',await api('/api/card/block/'+Number($('writeBlock').value),{method:'POST',body:JSON.stringify({dataHex:$('writeData').value,confirmation:$('writeConfirmation').value})}))}catch(e){show('writeResult',e.body||e.message)}}
-async function hotelCardProbe(){try{show('hotelResult',await api('/api/hotel-card/encode',{method:'POST',body:JSON.stringify({room:$('room').value,validFrom:new Date($('validFrom').value).toISOString(),validUntil:new Date($('validUntil').value).toISOString()})}))}catch(e){show('hotelResult',e.body||e.message)}}
-health();
+function pill(text,kind='ok'){const x=document.createElement('span');x.className='pill '+kind;x.textContent=text;return x}
+function nullableNumber(id){const v=$(id).value.trim();return v===''?null:Number(v)}
+function isoLocal(id){const v=$(id).value;if(!v)throw new Error('Preencha as datas.');return new Date(v).toISOString()}
+async function health(){try{const x=await api('/api/health');show('healthResult',x);const s=$('statusbar');s.innerHTML='';s.appendChild(pill('API online','ok'));s.appendChild(pill(x.is64BitProcess?'Processo x64 incorreto':'Processo x86',x.is64BitProcess?'bad':'ok'));s.appendChild(pill(x.vendor.codecPresent?'btlock57L.dll OK':'codec ausente',x.vendor.codecPresent?'ok':'warn'));s.appendChild(pill(x.vendor.pcscShimPresent?'shim PC/SC OK':'shim ausente',x.vendor.pcscShimPresent?'ok':'bad'));s.appendChild(pill(x.vendor.hotelCardWritesEnabled?'gravação habilitada':'gravação bloqueada',x.vendor.hotelCardWritesEnabled?'warn':'ok'));renderVendor(x.vendor)}catch(e){show('healthResult',e.body||e.message);$('statusbar').replaceChildren(pill('API indisponível','bad'))}}
+async function loadReaders(){try{const x=await api('/api/pcsc/readers');const sel=$('reader');const current=sel.value;sel.innerHTML='';for(const r of x.readers){const o=document.createElement('option');o.value=r;o.textContent=r;sel.appendChild(o)}if(current&&x.readers.includes(current))sel.value=current;show('pcscResult',x);return x}catch(e){show('pcscResult',e.body||e.message)}}
+async function probeCard(){try{if(!$('reader').value)await loadReaders();const r=$('reader').value;const x=await api('/api/pcsc/probe'+(r?'?reader='+encodeURIComponent(r):''));show('pcscResult',x);return x}catch(e){show('pcscResult',e.body||e.message);throw e}}
+function renderVendor(x){const m=$('vendorMetrics');m.innerHTML=`<b>Codec original</b><span>${x.codecPresent?'presente':'ausente'}</span><b>Shim ACR122</b><span>${x.pcscShimPresent?'presente':'ausente'}</span><b>Senha HPASS</b><span>${x.hotelPasswordConfigured?'configurada':'não configurada'}</span><b>Modelo / setor</b><span>${x.readerModel} / ${x.sectorNo}</span><b>Formato de data</b><span class="mono">${x.dateTimeFormat}</span>`}
+async function vendorStatus(){try{const x=await api('/api/vendor/status');renderVendor(x);show('vendorResult',x);return x}catch(e){show('vendorResult',e.body||e.message)}}
+async function serialNow(){try{show('vendorResult',await api('/api/vendor/serial'))}catch(e){show('vendorResult',e.body||e.message)}}
+async function writeGuestCard(){if(!confirm(`Gravar um cartão para o quarto ${$('room').value}?\n\nUse somente cartão autorizado/de laboratório nesta fase.`))return;try{const body={roomOrDoorId:$('room').value,validFrom:isoLocal('validFrom'),validUntil:isoLocal('validUntil'),confirmation:$('confirmation').value,readerName:$('reader').value||null,guestSerial:nullableNumber('guestSerial'),holderSerial:nullableNumber('holderSerial'),guestIndex:nullableNumber('guestIndex'),suitDoor:$('suitDoor').value,publicDoor:$('publicDoor').value};const x=await api('/api/hotel-card/encode',{method:'POST',body:JSON.stringify(body)});show('writeResult',x);if(x.written)log('CARTÃO GRAVADO',x)}catch(e){show('writeResult',e.body||e.message)}}
+async function refreshAll(){await Promise.allSettled([health(),loadReaders(),vendorStatus()])}
+refreshAll();
 </script>
 </body>
 </html>

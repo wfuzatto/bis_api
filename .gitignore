@@ -1,10 +1,15 @@
 bin/
 obj/
 publish/
+artifacts/
 .vs/
 *.user
 *.suo
 
-# DLLs proprietárias do fabricante: copie localmente com scripts/install-vendor-dlls.ps1
+# Configuração local: pode conter senha/chaves do hotel.
+appsettings.Local.json
+src/BisApi.Web/appsettings.Local.json
+
+# DLLs proprietárias do fabricante: copie localmente com scripts/install-vendor-codec.ps1
 src/BisApi.Web/vendor/x86/*.dll
 !src/BisApi.Web/vendor/x86/.gitkeep

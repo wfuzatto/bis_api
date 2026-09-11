@@ -1,106 +1,106 @@
 # bis_api
 
-Camada de integração direta entre o totem e o gravador de cartões utilizado pelo BIS Hotel 5.7, sem abrir ou automatizar o executável do BIS.
+Serviço Windows standalone para integrar PMS/totem com cartões do BIS Hotel 5.7 usando o codec original Be-Tech/Saga e um **ACS ACR122U via PC/SC**.
 
-> Estado atual: laboratório de hardware. A comunicação de baixo nível com o ACR120U está implementada; a codificação completa de cartão de hóspede ainda será adicionada depois de mapearmos o layout/segredos usados pelas fechaduras Saga/Be-Tech.
-
-## Objetivo
-
-```text
-Totem / PMS
-    |
-    | HTTP localhost
-    v
-bis_api (Windows x86)
-    |
-    | P/Invoke
-    v
-acr120u.dll
-    |
-    v
-ACR120 / RW-41 USB
-    |
-    v
-MIFARE 1K
-```
-
-O runtime final não depende do `btlock57.exe` nem do banco do BIS.
-
-## O que já existe
+## Estado atual
 
 - API HTTP local em `127.0.0.1:8765`.
-- Processo forçado para `x86`, compatível com as DLLs legadas do pacote BIS 5.7.
-- Detecção da presença da `acr120u.dll`.
-- Consulta da versão da DLL.
-- Abrir/fechar o ACR120U (USB1 a USB8).
-- Selecionar cartão e ler UID/tipo.
-- Autenticar setor MIFARE 1K/4K.
-- Ler bloco de 16 bytes.
-- Dump de um setor para análise.
-- Escrita crua de bloco protegida por configuração + palavra de confirmação.
-- Dashboard de laboratório para testar tudo pelo navegador.
-- Endpoint reservado para a futura codificação de cartão de quarto.
+- Dashboard standalone servido pelo próprio processo.
+- Diagnóstico ACR122/PC-SC: lista leitores, ATR e UID.
+- Compatibilidade `AcsReader.dll` -> PC/SC para o ACR122U.
+- Integração com `btlock57L.dll` para `Write_Guest_Card` e `SerialNo_FromNow`.
+- Backend ACR120/RW-41 legado preservado.
+- Publicação `win-x86` self-contained.
+- Instalação como serviço Windows `BisApi`.
+- Emissão de cartão e escrita crua desabilitadas por padrão.
 
-## Segurança do laboratório
+## Arquitetura principal
 
-A escrita crua vem **desabilitada por padrão**. Para habilitar, altere `BisApi:EnableRawWrites` em `appsettings.json` para `true`. Mesmo habilitada, a API exige a palavra configurada em `RequireWriteChallenge`.
-
-Não grave blocos trailer (`3, 7, 11...`) sem conhecer exatamente as chaves e access bits; uma escrita incorreta pode tornar o setor inacessível.
-
-## DLLs do fabricante
-
-As DLLs proprietárias **não são versionadas neste repositório**. Copie a partir da instalação autorizada do BIS:
-
-```powershell
-.\scripts\install-vendor-dlls.ps1 -BisFolder "C:\caminho\BIS Hotel v5.7"
+```text
+PMS / dashboard
+      |
+      v
+BisApi.exe (x86)
+      |
+      v
+btlock57L.dll       codec Be-Tech/Saga original
+      |
+      v
+AcsReader.dll       shim PC/SC criado neste repositório
+      |
+      v
+WinSCard -> ACS ACR122U -> MIFARE Classic
 ```
 
-O script procura e copia, quando disponíveis:
+O projeto **não recria o algoritmo proprietário do cartão**. Ele conserva `btlock57L.dll` como codec e substitui apenas a camada de comunicação que antes terminava no ACR120/RW-41.
 
-- `acr120u.dll`
-- `AcsReader.dll`
-- `Win32dll.dll`
+## Instalação standalone
 
-O projeto usa diretamente `acr120u.dll`; as demais ficam disponíveis para os próximos testes.
+Veja o guia completo em [`docs/STANDALONE_ACR122.md`](docs/STANDALONE_ACR122.md).
 
-## Requisitos
-
-- Windows 10/11 ou Windows Server.
-- Driver do ACR120U/RW-41 instalado.
-- .NET 8 SDK para desenvolvimento, ou publicação self-contained.
-- Arquitetura x86.
-
-## Executar em desenvolvimento
+Resumo:
 
 ```powershell
-dotnet restore .\src\BisApi.Web\BisApi.Web.csproj
-dotnet run --project .\src\BisApi.Web\BisApi.Web.csproj
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\build-standalone.ps1 -PmsSagaFolder "C:\caminho\PMS Saga V.1.0.8.7_19 HEX"
+cd .\publish\standalone-win-x86
+.\BisApi.exe
 ```
 
-Abra:
+Depois abra:
 
 ```text
 http://127.0.0.1:8765
 ```
 
-## Publicar para o computador do totem
+Após validar o ACR122, execute `install-service.ps1` como Administrador.
 
-```powershell
-dotnet publish .\src\BisApi.Web\BisApi.Web.csproj `
-  -c Release `
-  -r win-x86 `
-  --self-contained true `
-  -o .\publish\win-x86
+## Configuração local
+
+Copie/edite `appsettings.Local.json`. Esse arquivo é ignorado pelo Git porque pode conter a senha HPASS e chaves de compatibilidade.
+
+```json
+{
+  "BisApi": {
+    "EnableHotelCardWrites": false,
+    "RequireWriteChallenge": "GRAVAR"
+  },
+  "BeTech57": {
+    "PcscReader": "ACS ACR122 0",
+    "HotelPassword": "000000"
+  }
+}
 ```
 
-Confirme que `acr120u.dll` e suas dependências estão junto do executável publicado.
+A emissão só funciona quando `EnableHotelCardWrites=true` e a confirmação recebida pela API coincide com `RequireWriteChallenge`.
 
-## Próxima etapa: cartão de hotel
+## DLLs do fabricante
 
-A API do ACR120U resolve a comunicação física, mas o cartão da fechadura contém um formato de aplicação específico do sistema Saga/Be-Tech: quarto, validade, permissões, sequência, possíveis checksums e chaves de setores.
+DLLs proprietárias não são versionadas. Para o modo ACR122, use:
 
-A próxima etapa é mapear esse formato e implementar `IHotelCardCodec`/`SagaBis57CardCodec`. O plano de laboratório está em `docs/CARD_CODEC_PLAN.md`.
+```powershell
+.\scripts\install-vendor-codec.ps1 -PmsSagaFolder "C:\caminho\PMS Saga V.1.0.8.7_19 HEX"
+```
 
-## Referência técnica
+Esse script copia `btlock57L.dll`, mas **não copia o `AcsReader.dll` original**. O nome `AcsReader.dll` na aplicação standalone pertence ao shim PC/SC compilado pelo projeto.
 
-O ACR120U expõe as funções `ACR120_Open`, `ACR120_Select`, `ACR120_Login`, `ACR120_Read` e `ACR120_Write`. A assinatura utilizada neste projeto segue a documentação oficial da Advanced Card Systems para o ACR120U API v3.00.
+Para o backend ACR120 legado existe `scripts/install-vendor-dlls.ps1`.
+
+## Endpoints principais
+
+- `GET /api/health`
+- `GET /api/pcsc/readers`
+- `GET /api/pcsc/probe?reader=...`
+- `GET /api/vendor/status`
+- `GET /api/vendor/serial`
+- `POST /api/hotel-card/encode`
+
+Os endpoints ACR120 de laboratório anteriores foram preservados para rollback e comparação.
+
+## Segurança
+
+- bind padrão somente em loopback (`127.0.0.1`);
+- segredos fora do repositório;
+- escrita de cartão desabilitada por padrão;
+- raw writes e sector trailers bloqueados por padrão;
+- primeiro teste deve ser feito em cartão/fechadura autorizados de laboratório.

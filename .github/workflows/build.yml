@@ -14,7 +14,32 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
+      - name: Build PCSC shim x86
+        shell: pwsh
+        run: .\scripts\build-native-shim.ps1
+
       - name: Restore
         run: dotnet restore .\src\BisApi.Web\BisApi.Web.csproj
+
       - name: Build x86
         run: dotnet build .\src\BisApi.Web\BisApi.Web.csproj -c Release --no-restore
+
+      - name: Publish standalone
+        shell: pwsh
+        run: |
+          dotnet publish .\src\BisApi.Web\BisApi.Web.csproj -c Release -r win-x86 --self-contained true --no-restore -o .\publish\standalone-win-x86
+          Copy-Item .\artifacts\native-win-x86\AcsReader.dll .\publish\standalone-win-x86\AcsReader.dll -Force
+          Copy-Item .\scripts\install-service.ps1 .\publish\standalone-win-x86\
+          Copy-Item .\scripts\uninstall-service.ps1 .\publish\standalone-win-x86\
+          Copy-Item .\scripts\install-vendor-codec.ps1 .\publish\standalone-win-x86\
+          if (-not (Test-Path .\publish\standalone-win-x86\appsettings.Local.json)) {
+            Copy-Item .\src\BisApi.Web\appsettings.Local.example.json .\publish\standalone-win-x86\appsettings.Local.json
+          }
+
+      - name: Upload standalone package
+        uses: actions/upload-artifact@v4
+        with:
+          name: bis-api-standalone-win-x86
+          path: publish/standalone-win-x86/
+          if-no-files-found: error
