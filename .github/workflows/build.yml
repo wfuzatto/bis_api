@@ -15,6 +15,17 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Validate Windows installer PowerShell syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path '.\installer\BisApi-Install.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
       - name: Build PCSC shim x86
         shell: pwsh
         run: .\scripts\build-native-shim.ps1
@@ -37,9 +48,48 @@ jobs:
             Copy-Item .\src\BisApi.Web\appsettings.Local.example.json .\publish\standalone-win-x86\appsettings.Local.json
           }
 
+      - name: Build Windows installer package
+        shell: pwsh
+        run: |
+          $installer = '.\publish\windows-installer'
+          New-Item -ItemType Directory -Force -Path $installer | Out-Null
+
+          $standaloneZip = Join-Path $installer 'bis-api-standalone-win-x86.zip'
+          if (Test-Path $standaloneZip) { Remove-Item $standaloneZip -Force }
+          Compress-Archive -Path '.\publish\standalone-win-x86\*' -DestinationPath $standaloneZip -CompressionLevel Optimal
+
+          Copy-Item '.\installer\BisApi-Install.bat' $installer -Force
+          Copy-Item '.\installer\BisApi-Install.ps1' $installer -Force
+          Copy-Item '.\installer\README-INSTALL.txt' $installer -Force
+
+          $packageHash = (Get-FileHash $standaloneZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $shimHash = (Get-FileHash '.\publish\standalone-win-x86\AcsReader.dll' -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = [ordered]@{
+            schema = 1
+            version = "1.0.$env:GITHUB_RUN_NUMBER"
+            commit = $env:GITHUB_SHA
+            createdUtc = (Get-Date).ToUniversalTime().ToString('o')
+            package = [ordered]@{
+              file = 'bis-api-standalone-win-x86.zip'
+              sha256 = $packageHash
+            }
+            shim = [ordered]@{
+              file = 'AcsReader.dll'
+              sha256 = $shimHash
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $installer 'manifest.json') -Encoding UTF8
+
       - name: Upload standalone package
         uses: actions/upload-artifact@v4
         with:
           name: bis-api-standalone-win-x86
           path: publish/standalone-win-x86/
+          if-no-files-found: error
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: bis-api-windows-installer
+          path: publish/windows-installer/
           if-no-files-found: error

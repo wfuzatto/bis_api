@@ -12,6 +12,7 @@ Serviço Windows standalone para integrar PMS/totem com cartões do BIS Hotel 5.
 - Backend ACR120/RW-41 legado preservado.
 - Publicação `win-x86` self-contained.
 - Instalação como serviço Windows `BisApi`.
+- Instalador automático Windows gerado pelo GitHub Actions.
 - Emissão de cartão e escrita crua desabilitadas por padrão.
 
 ## Arquitetura principal
@@ -34,7 +35,40 @@ WinSCard -> ACS ACR122U -> MIFARE Classic
 
 O projeto **não recria o algoritmo proprietário do cartão**. Ele conserva `btlock57L.dll` como codec e substitui apenas a camada de comunicação que antes terminava no ACR120/RW-41.
 
-## Instalação standalone
+## Instalador automático Windows
+
+O workflow `build` gera o artefato **`bis-api-windows-installer`**. Baixe o artefato do último GitHub Actions concluído com sucesso, extraia o ZIP inteiro e execute:
+
+```text
+BisApi-Install.bat
+```
+
+O pacote contém:
+
+- `BisApi-Install.bat`;
+- `BisApi-Install.ps1`;
+- `manifest.json` com hashes gerados pelo CI;
+- `bis-api-standalone-win-x86.zip` self-contained;
+- `README-INSTALL.txt`.
+
+O instalador:
+
+- eleva para Administrador e devolve corretamente o código de saída;
+- valida SHA-256 do pacote e do `AcsReader.dll` PC/SC;
+- limpa a pasta temporária antes de extrair uma nova versão;
+- inicia/verifica o serviço Windows `SCardSvr`;
+- preserva `appsettings.Local.json` e HPASS em atualizações;
+- tenta localizar `btlock57L.dll` + `Data.dll` em uma instalação local licenciada do BIS/PMS Saga;
+- instala/atualiza o serviço Windows `BisApi`;
+- detecta automaticamente o nome PC/SC do ACR122 quando disponível;
+- confirma que a porta `8765` está somente no loopback;
+- mantém `EnableHotelCardWrites=false` após a instalação.
+
+DLLs proprietárias Be-Tech/Saga **não são publicadas no GitHub**. Se o codec não for localizado automaticamente, o serviço é instalado em modo diagnóstico e pode ser completado depois com a instalação local licenciada.
+
+O pacote é self-contained: **não instala .NET SDK, Visual Studio, Docker ou XAMPP** no totem.
+
+## Instalação standalone manual
 
 Veja o guia completo em [`docs/STANDALONE_ACR122.md`](docs/STANDALONE_ACR122.md).
 
