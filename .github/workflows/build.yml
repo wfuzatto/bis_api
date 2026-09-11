@@ -19,11 +19,11 @@ jobs:
         shell: pwsh
         run: .\scripts\build-native-shim.ps1
 
-      - name: Restore
-        run: dotnet restore .\src\BisApi.Web\BisApi.Web.csproj
+      - name: Restore win-x86
+        run: dotnet restore .\src\BisApi.Web\BisApi.Web.csproj -r win-x86
 
       - name: Build x86
-        run: dotnet build .\src\BisApi.Web\BisApi.Web.csproj -c Release --no-restore
+        run: dotnet build .\src\BisApi.Web\BisApi.Web.csproj -c Release -r win-x86 --no-restore
 
       - name: Publish standalone
         shell: pwsh
