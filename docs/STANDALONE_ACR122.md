@@ -166,7 +166,7 @@ Para remover também os arquivos:
 O endpoint `POST /api/hotel-card/encode` usa:
 
 - `RoomOrDoorId`: até 6 caracteres; números são preenchidos à esquerda (`1200` -> `001200`);
-- `ValidFrom` / `ValidUntil`: convertidos para `yyyyMMddHHmmss`;
+- `ValidFrom` / `ValidUntil`: convertidos para o formato do PMS BIS `yyMMddHHmm`;
 - `SuitDoor`: 12 caracteres hex, padrão `000000000000`;
 - `PublicDoor`: 8 caracteres hex, padrão `00000000`;
 - `GuestSerial`: automático via `SerialNo_FromNow` quando omitido;

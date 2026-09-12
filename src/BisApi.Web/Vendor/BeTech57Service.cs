@@ -33,7 +33,7 @@ public sealed class BeTech57Service
             section.GetValue("Port", 1),
             section.GetValue("SectorNo", 0),
             section["PcscReader"] ?? string.Empty,
-            "yyyyMMddHHmmss");
+            "yyMMddHHmm");
     }
 
     public int SerialNoFromNow()
@@ -109,8 +109,9 @@ public sealed class BeTech57Service
                 guestSerial = BeTech57Native.SerialNoFromNow();
             var holderSerial = request.HolderSerial.GetValueOrDefault();
 
-            var begin = request.ValidFrom.ToLocalTime().ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
-            var end = request.ValidUntil.ToLocalTime().ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
+            // The BIS PMS card format is YYMMDDHHmm (10 ASCII characters).
+            var begin = request.ValidFrom.ToLocalTime().ToString("yyMMddHHmm", CultureInfo.InvariantCulture);
+            var end = request.ValidUntil.ToLocalTime().ToString("yyMMddHHmm", CultureInfo.InvariantCulture);
 
             var result = BeTech57Native.WriteGuestCard(
                 port,
