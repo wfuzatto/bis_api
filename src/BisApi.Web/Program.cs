@@ -46,6 +46,7 @@ app.MapGet("/api/pcsc/probe", (PcscService pcsc, string? reader) => Safe(() => R
 // Codec original Be-Tech/Saga + shim PC/SC
 app.MapGet("/api/vendor/status", (BeTech57Service vendor) => Safe(() => Results.Ok(vendor.Status())));
 app.MapGet("/api/vendor/read-snr", (BeTech57Service vendor) => Safe(() => Results.Ok(vendor.ReadSnr())));
+app.MapGet("/api/vendor/read-guest-card", (BeTech57Service vendor) => Safe(() => Results.Ok(vendor.ReadGuestCard())));
 app.MapGet("/api/vendor/serial", (BeTech57Service vendor) => Safe(() => Results.Ok(new { serial = vendor.SerialNoFromNow() })));
 app.MapPost("/api/hotel-card/encode", (BeTech57Service vendor, HotelCardWriteRequest request) =>
     Safe(() =>

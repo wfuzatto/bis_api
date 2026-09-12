@@ -59,6 +59,51 @@ public sealed class BeTech57Service
         }
     }
 
+    public ReadGuestCardResult ReadGuestCard()
+    {
+        lock (_sync)
+        {
+            EnsureRuntime();
+            var section = _configuration.GetSection("BeTech57");
+            var password = (section["HotelPassword"] ?? string.Empty).Trim();
+            if (password.Length != 6 || !password.All(char.IsDigit))
+                throw new InvalidOperationException("Configure BeTech57:HotelPassword com os 6 dígitos da senha HPASS do PMS Saga. Não versione essa senha no Git.");
+
+            var card = _pcsc.Probe(section["PcscReader"]);
+            ConfigureShim(card.Reader);
+            ApplyOptionalKeyEnvironment(section);
+
+            var port = checked((byte)section.GetValue("Port", 1));
+            var readerModel = checked((byte)section.GetValue("ReaderModel", 4));
+            var sector = checked((byte)section.GetValue("SectorNo", 0));
+            var doorId = new byte[7];
+            var suitDoor = new byte[5];
+            var publicDoor = new byte[9];
+            var beginTime = new byte[11];
+            var endTime = new byte[11];
+
+            var result = BeTech57Native.ReadGuestCard(
+                port, readerModel, sector, password,
+                out var guestSerial, out var holderSerial, out var guestIndex,
+                doorId, suitDoor, publicDoor, beginTime, endTime);
+
+            return new ReadGuestCardResult(
+                result == 0,
+                result,
+                result == 0 ? "Leitura do cartão de hóspede concluída." : "O codec não confirmou os dados do cartão de hóspede.",
+                card.Reader,
+                card.UidHex,
+                result == 0 ? ReadAscii(doorId) : null,
+                result == 0 ? guestSerial : null,
+                result == 0 ? holderSerial : null,
+                result == 0 ? guestIndex : null,
+                result == 0 ? ReadAscii(suitDoor) : null,
+                result == 0 ? ReadAscii(publicDoor) : null,
+                result == 0 ? ReadAscii(beginTime) : null,
+                result == 0 ? ReadAscii(endTime) : null);
+        }
+    }
+
     private void ConfigureShim(string reader)
     {
         Environment.SetEnvironmentVariable("BIS_API_PCSC_READER", reader, EnvironmentVariableTarget.Process);
@@ -170,6 +215,9 @@ public sealed class BeTech57Service
         return text;
     }
 
+    private static string ReadAscii(byte[] value) =>
+        System.Text.Encoding.ASCII.GetString(value).TrimEnd('\0', ' ');
+
     private static string NormalizeHexMask(string? value, int length, string field, string defaultValue)
     {
         var text = string.IsNullOrWhiteSpace(value) ? defaultValue : value.Trim().ToUpperInvariant();
@@ -209,6 +257,21 @@ public sealed class BeTech57Service
 }
 
 public sealed record ReadSnrResult(bool Success, int VendorResult, string Reader, string? Serial, string UidHex);
+
+public sealed record ReadGuestCardResult(
+    bool Success,
+    int VendorResult,
+    string Message,
+    string Reader,
+    string UidHex,
+    string? DoorId,
+    int? GuestSerial,
+    int? HolderSerial,
+    int? GuestIndex,
+    string? SuitDoor,
+    string? PublicDoor,
+    string? BeginTime,
+    string? EndTime);
 
 public sealed record BeTech57Status(
     bool CodecPresent,

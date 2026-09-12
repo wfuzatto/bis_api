@@ -154,6 +154,7 @@ Para o backend ACR120 legado existe `scripts/install-vendor-dlls.ps1`.
 - `GET /api/vendor/status`
 - `GET /api/vendor/serial`
 - `GET /api/vendor/read-snr` (somente leitura, pelo codec original)
+- `GET /api/vendor/read-guest-card` (somente leitura, para reconciliação de emissão incerta)
 - `POST /api/hotel-card/encode`
 
 O backend ACS usa `Port=1`, `ReaderModel=4`, `SectorNo=0` e a ordem
