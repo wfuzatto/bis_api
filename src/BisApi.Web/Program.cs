@@ -11,6 +11,7 @@ builder.WebHost.UseUrls(builder.Configuration["BisApi:Url"] ?? "http://127.0.0.1
 builder.Services.AddSingleton<Acr120Service>();
 builder.Services.AddSingleton<PcscService>();
 builder.Services.AddSingleton<BeTech57Service>();
+builder.Services.AddSingleton<GuestCardDiagnosticsService>();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
@@ -47,6 +48,7 @@ app.MapGet("/api/pcsc/probe", (PcscService pcsc, string? reader) => Safe(() => R
 app.MapGet("/api/vendor/status", (BeTech57Service vendor) => Safe(() => Results.Ok(vendor.Status())));
 app.MapGet("/api/vendor/read-snr", (BeTech57Service vendor) => Safe(() => Results.Ok(vendor.ReadSnr())));
 app.MapGet("/api/vendor/read-guest-card", (BeTech57Service vendor) => Safe(() => Results.Ok(vendor.ReadGuestCard())));
+app.MapGet("/api/vendor/card-key-state", (GuestCardDiagnosticsService diagnostics) => Safe(() => Results.Ok(diagnostics.Inspect())));
 app.MapGet("/api/vendor/serial", (BeTech57Service vendor) => Safe(() => Results.Ok(new { serial = vendor.SerialNoFromNow() })));
 app.MapPost("/api/hotel-card/encode", (BeTech57Service vendor, HotelCardWriteRequest request) =>
     Safe(() =>
