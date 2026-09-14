@@ -43,6 +43,7 @@ app.MapGet("/api/health", (Acr120Service legacy, BeTech57Service vendor) => Safe
 // ACR122 / PC-SC
 app.MapGet("/api/pcsc/readers", (PcscService pcsc) => Safe(() => Results.Ok(new { readers = pcsc.ListReaders() })));
 app.MapGet("/api/pcsc/probe", (PcscService pcsc, string? reader) => Safe(() => Results.Ok(pcsc.Probe(reader))));
+app.MapGet("/api/pcsc/hce-probe", (PcscService pcsc, string? reader) => Safe(() => Results.Ok(pcsc.ProbeNfcKeyHce(reader))));
 
 // Codec original Be-Tech/Saga + shim PC/SC
 app.MapGet("/api/vendor/status", (BeTech57Service vendor) => Safe(() => Results.Ok(vendor.Status())));
