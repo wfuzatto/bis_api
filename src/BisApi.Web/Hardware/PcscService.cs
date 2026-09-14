@@ -138,13 +138,14 @@ public sealed class PcscService
                 // UID is diagnostic only. Some HCE targets/readers do not expose it through FF CA.
             }
 
-            var select = new byte[5 + NfcKeyLabAid.Length];
+            var select = new byte[6 + NfcKeyLabAid.Length];
             select[0] = 0x00;
             select[1] = 0xA4;
             select[2] = 0x04;
             select[3] = 0x00;
             select[4] = (byte)NfcKeyLabAid.Length;
             Buffer.BlockCopy(NfcKeyLabAid, 0, select, 5, NfcKeyLabAid.Length);
+            select[^1] = 0x00;
 
             var selectCommand = select;
             var selectResponse = Transmit(card, protocol, selectCommand);
