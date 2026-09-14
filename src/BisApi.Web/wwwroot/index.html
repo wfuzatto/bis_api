@@ -32,7 +32,7 @@
     <section class="card third">
       <h2>ACR122 / PC/SC</h2><p class="sub">Detecta o leitor pelo Smart Card Resource Manager do Windows.</p>
       <div class="field"><label>Leitor</label><select id="reader"></select></div>
-      <div class="row" style="margin-top:10px"><button onclick="loadReaders()">Listar leitores</button><button class="secondary" onclick="probeCard()">Ler ATR + UID</button></div>
+      <div class="row" style="margin-top:10px"><button onclick="loadReaders()">Listar leitores</button><button class="secondary" onclick="probeCard()">Ler ATR + UID</button><button onclick="probeHce()">Testar celular HCE</button></div>
       <div id="pcscResult" class="result"></div>
     </section>
 
@@ -86,6 +86,7 @@ function isoLocal(id){const v=$(id).value;if(!v)throw new Error('Preencha as dat
 async function health(){try{const x=await api('/api/health');show('healthResult',x);const s=$('statusbar');s.innerHTML='';s.appendChild(pill('API online','ok'));s.appendChild(pill(x.is64BitProcess?'Processo x64 incorreto':'Processo x86',x.is64BitProcess?'bad':'ok'));s.appendChild(pill(x.vendor.codecPresent?'btlock57L.dll OK':'codec ausente',x.vendor.codecPresent?'ok':'warn'));s.appendChild(pill(x.vendor.pcscShimPresent?'shim PC/SC OK':'shim ausente',x.vendor.pcscShimPresent?'ok':'bad'));s.appendChild(pill(x.vendor.hotelCardWritesEnabled?'gravação habilitada':'gravação bloqueada',x.vendor.hotelCardWritesEnabled?'warn':'ok'));renderVendor(x.vendor)}catch(e){show('healthResult',e.body||e.message);$('statusbar').replaceChildren(pill('API indisponível','bad'))}}
 async function loadReaders(){try{const x=await api('/api/pcsc/readers');const sel=$('reader');const current=sel.value;sel.innerHTML='';for(const r of x.readers){const o=document.createElement('option');o.value=r;o.textContent=r;sel.appendChild(o)}if(current&&x.readers.includes(current))sel.value=current;show('pcscResult',x);return x}catch(e){show('pcscResult',e.body||e.message)}}
 async function probeCard(){try{if(!$('reader').value)await loadReaders();const r=$('reader').value;const x=await api('/api/pcsc/probe'+(r?'?reader='+encodeURIComponent(r):''));show('pcscResult',x);return x}catch(e){show('pcscResult',e.body||e.message);throw e}}
+async function probeHce(){try{if(!$('reader').value)await loadReaders();const r=$('reader').value;const x=await api('/api/pcsc/hce-probe'+(r?'?reader='+encodeURIComponent(r):''));show('pcscResult',x);return x}catch(e){show('pcscResult',e.body||e.message);throw e}}
 function renderVendor(x){const m=$('vendorMetrics');m.innerHTML=`<b>Codec original</b><span>${x.codecPresent?'presente':'ausente'}</span><b>Shim ACR122</b><span>${x.pcscShimPresent?'presente':'ausente'}</span><b>Senha HPASS</b><span>${x.hotelPasswordConfigured?'configurada':'não configurada'}</span><b>Modelo / setor</b><span>${x.readerModel} / ${x.sectorNo}</span><b>Formato de data</b><span class="mono">${x.dateTimeFormat}</span>`}
 async function vendorStatus(){try{const x=await api('/api/vendor/status');renderVendor(x);show('vendorResult',x);return x}catch(e){show('vendorResult',e.body||e.message)}}
 async function serialNow(){try{show('vendorResult',await api('/api/vendor/serial'))}catch(e){show('vendorResult',e.body||e.message)}}
