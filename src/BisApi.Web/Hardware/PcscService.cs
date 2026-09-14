@@ -146,7 +146,13 @@ public sealed class PcscService
             select[4] = (byte)NfcKeyLabAid.Length;
             Buffer.BlockCopy(NfcKeyLabAid, 0, select, 5, NfcKeyLabAid.Length);
 
-            var selectResponse = Transmit(card, protocol, select);
+            var selectCommand = select;
+            var selectResponse = Transmit(card, protocol, selectCommand);
+            if (!Is9000(selectResponse))
+            {
+                selectCommand = select[..^1];
+                selectResponse = Transmit(card, protocol, selectCommand);
+            }
             var selectOk = Is9000(selectResponse);
 
             byte[] labResponse = [];
@@ -164,7 +170,7 @@ public sealed class PcscService
                 Convert.ToHexString(atr),
                 uidHex,
                 uidStatus,
-                Convert.ToHexString(select),
+                Convert.ToHexString(selectCommand),
                 Convert.ToHexString(selectResponse),
                 StatusWordHex(selectResponse),
                 selectOk,
@@ -256,7 +262,8 @@ public sealed class PcscService
             return exact;
         }
 
-        return readers.FirstOrDefault(x => x.Contains("ACR122", StringComparison.OrdinalIgnoreCase))
+        return readers.FirstOrDefault(x => x.Contains("ACR1281", StringComparison.OrdinalIgnoreCase))
+               ?? readers.FirstOrDefault(x => x.Contains("ACR122", StringComparison.OrdinalIgnoreCase))
                ?? readers.FirstOrDefault();
     }
 
